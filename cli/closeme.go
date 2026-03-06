@@ -16,6 +16,7 @@ import (
 type State struct {
 	AP         *ansipixels.AnsiPixels
 	MemProfile string
+	CurX, CurY int
 }
 
 func Main() int {
@@ -47,21 +48,60 @@ func Main() int {
 	if err := ap.Open(); err != nil {
 		return 1 // error already logged
 	}
-	defer ap.Restore()
+	ap.MouseTrackingOn()
+	defer func() {
+		ap.MouseTrackingOff()
+		ap.Restore()
+	}()
 	return st.Run()
+}
+
+const text = `Click me!`
+
+func (st *State) Draw() {
+	ap := st.AP
+	ap.StartSyncMode()
+	ap.ClearScreen()
+	// make sure the box stays on screen.
+	startx := st.CurX - len(text)/2 - 1
+	if startx < 0 {
+		st.CurX += -startx
+		startx = 0
+	}
+	endx := startx + len(text) + 2
+	if endx > ap.W {
+		st.CurX -= endx - ap.W
+		startx = ap.W - len(text) - 2
+	}
+	starty := st.CurY - 1
+	if starty < 0 {
+		st.CurY += -starty
+		starty = 0
+	}
+	endy := starty + 3
+	if endy > ap.H {
+		st.CurY -= endy - ap.H
+		starty = ap.H - 3
+	}
+	ap.DrawRoundBox(startx, starty, len(text)+2, 3)
+	ap.WriteAtStr(startx+1, starty+1, text)
+	ap.EndSyncMode()
 }
 
 func (st *State) Run() int {
 	ap := st.AP
 	ap.SyncBackgroundColor()
 	ap.OnResize = func() error {
-		ap.ClearScreen()
-		ap.StartSyncMode()
-		// Redraw/resize/do something here:
-		ap.WriteBoxed(ap.H/2-1, "Welcome to closeme!\n%dx%d\nQ to quit.", ap.W, ap.H)
-		// ...
-		ap.EndSyncMode()
+		st.CurX = ap.W / 2
+		st.CurY = ap.H/2 - 1
+		st.Draw()
 		return nil
+	}
+	ap.OnMouse = func() {
+		// change state cur.x/y to mouse position and redraw
+		st.CurX = ap.Mx
+		st.CurY = ap.My - 1
+		st.Draw()
 	}
 	_ = ap.OnResize()   // initial draw.
 	ap.AutoSync = false // for cursor to blink on splash screen. remove if not wanted.
