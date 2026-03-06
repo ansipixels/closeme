@@ -1,4 +1,4 @@
-module github.com/ansipixels/NAME
+module github.com/ansipixels/closeme
 
 go 1.25.0
 

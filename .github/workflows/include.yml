@@ -23,15 +23,15 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     call-codeql:
         uses: ansipixels/workflows/.github/workflows/codeql-analysis.yml@main
-    releaser-NAME:
+    releaser-closeme:
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         uses: ansipixels/workflows/.github/workflows/releaser.yml@main
         permissions:
           contents: write
           packages: write
         with:
-            description: "DESCRIPTION"
-            binary_name: "NAME"
+            description: "Fun little TUI where you try to close the box"
+            binary_name: "closeme"
             dockerfile: "./Dockerfile"
         secrets:
             GH_PAT: ${{ secrets.GH_PAT }}
