@@ -139,7 +139,6 @@ func (st *State) recordMouse(mx, my float64, now time.Time) {
 		st.HasMouse = true
 		st.MouseSpeed = 0
 	}
-
 	st.LastMouseX = mx
 	st.LastMouseY = my
 	st.LastMouseAt = now
@@ -285,7 +284,6 @@ func (st *State) Tick() bool {
 	}
 	st.PosX += st.VelX
 	st.PosY += st.VelY
-
 	minX, maxX, minY, maxY := st.arenaBounds()
 	const bounce = 0.82
 	st.PosX, st.VelX = bounceAxis(st.PosX, st.VelX, minX, maxX, bounce)
