@@ -178,6 +178,9 @@ func (st *State) Draw() {
 	default:
 		color = tcolor.Green
 	}
+	if st.Clicked {
+		color = tcolor.BrightPurple
+	}
 	ap.DrawColoredBox(startx+1, starty, width-2, 3, color.Background(), true)
 	ap.WriteAtStr(startx+2, starty+1, text)
 }
@@ -315,5 +318,6 @@ func (st *State) Tick() bool {
 	st.updateMouseVector()
 	st.syncCursor()
 	st.Draw()
+	st.Clicked = false
 	return true
 }
