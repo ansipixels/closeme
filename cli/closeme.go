@@ -31,6 +31,8 @@ type State struct {
 	MouseSpeed             float64
 	MouseAwayX, MouseAwayY float64
 	MouseDist              float64
+	GameOver               bool
+	Clicked                int
 }
 
 func Main() int {
@@ -75,6 +77,8 @@ func Main() int {
 const (
 	text  = `Click me!`
 	width = len(text) + 4 // +4 is 2 wide borders on each side
+	// How many frames to show the clicked state after a click, to make it more visible.
+	clickedFrameCount = 6
 )
 
 func (st *State) arenaBounds() (float64, float64, float64, float64) {
@@ -176,6 +180,9 @@ func (st *State) Draw() {
 	default:
 		color = tcolor.Green
 	}
+	if st.Clicked > 0 {
+		color = tcolor.BrightPurple
+	}
 	ap.DrawColoredBox(startx+1, starty, width-2, 3, color.Background(), true)
 	ap.WriteAtStr(startx+2, starty+1, text)
 }
@@ -187,6 +194,9 @@ func (st *State) Run() int {
 	st.PosY = float64(ap.H/2 - 1)
 	st.syncCursor()
 	ap.OnResize = func() error {
+		if st.GameOver {
+			return nil
+		}
 		st.clampBallToArena()
 		st.syncCursor()
 		ap.StartSyncMode()
@@ -196,6 +206,13 @@ func (st *State) Run() int {
 	}
 	ap.OnMouse = func() {
 		st.recordMouse(float64(ap.Mx), float64(ap.My-1), time.Now())
+		if ap.MouseRelease() {
+			st.Clicked = clickedFrameCount
+			log.LogVf("Mouse released at (%.2f, %.2f) - dist %.2f", st.MouseX, st.MouseY, st.MouseDist)
+			if st.MouseDist < 2.0 {
+				st.GameOver = true
+			}
+		}
 	}
 	_ = ap.OnResize() // initial draw.
 	err := ap.FPSTicks(st.Tick)
@@ -214,6 +231,17 @@ func (st *State) Run() int {
 	if err != nil {
 		log.Infof("Exiting on %v", err)
 		return 1
+	}
+	if st.GameOver {
+		// Get one more click while "You Won!" is on the screen, so that it doesn't immediately disappear.
+		ap.MouseTrackingOff()
+		ap.MouseClickOn()
+		ap.OnMouse = nil
+		ap.Out.Flush()
+		time.Sleep(750 * time.Millisecond) // absorb some clicks etc.
+		_ = ap.ReadOrResizeOrSignal()
+		ap.MoveCursor(0, ap.H-1)
+		ap.MouseClickOff()
 	}
 	return 0
 }
@@ -273,6 +301,12 @@ func (st *State) Tick() bool {
 			log.Debugf("Input %q...", c)
 		}
 	}
+	if st.GameOver {
+		st.AP.ClearScreen()
+		txt := "🎉🎉🎉\nYou WON!\n🎉🎉🎉"
+		st.AP.WriteBoxed(st.AP.H/2-1, "%s", txt)
+		return false
+	}
 	st.applyMousePhysics()
 	st.VelX *= 0.97
 	st.VelY *= 0.97
@@ -292,5 +326,8 @@ func (st *State) Tick() bool {
 	st.updateMouseVector()
 	st.syncCursor()
 	st.Draw()
+	if st.Clicked > 0 {
+		st.Clicked--
+	}
 	return true
 }
