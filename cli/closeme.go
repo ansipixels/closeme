@@ -13,6 +13,7 @@ import (
 	"fortio.org/cli"
 	"fortio.org/log"
 	"fortio.org/terminal/ansipixels"
+	"fortio.org/terminal/ansipixels/tcolor"
 )
 
 type State struct {
@@ -28,6 +29,8 @@ type State struct {
 	LastMouseX, LastMouseY float64
 	LastMouseAt            time.Time
 	MouseSpeed             float64
+	MouseAwayX, MouseAwayY float64
+	MouseDist              float64
 }
 
 func Main() int {
@@ -69,12 +72,15 @@ func Main() int {
 	return st.Run()
 }
 
-const text = `Click me!`
+const (
+	text  = `Click me!`
+	width = len(text) + 4 // +4 is 2 wide borders on each side
+)
 
 func (st *State) arenaBounds() (float64, float64, float64, float64) {
 	ap := st.AP
-	boxW := len(text) + 2
-	leftPad := float64(len(text)/2 + 1)
+	boxW := width
+	leftPad := float64(width / 2)
 	rightPad := float64(boxW) - leftPad
 	minX := leftPad
 	maxX := float64(ap.W) - rightPad
@@ -110,6 +116,18 @@ func (st *State) syncCursor() {
 	st.CurY = int(math.Round(st.PosY))
 }
 
+func (st *State) updateMouseVector() {
+	if !st.HasMouse {
+		st.MouseAwayX = 0
+		st.MouseAwayY = 0
+		st.MouseDist = math.Inf(1)
+		return
+	}
+	st.MouseAwayX = st.PosX - st.MouseX
+	st.MouseAwayY = st.PosY - st.MouseY
+	st.MouseDist = math.Hypot(st.MouseAwayX, st.MouseAwayY)
+}
+
 func (st *State) recordMouse(mx, my float64, now time.Time) {
 	if st.HasMouse {
 		dt := now.Sub(st.LastMouseAt).Seconds()
@@ -127,6 +145,7 @@ func (st *State) recordMouse(mx, my float64, now time.Time) {
 	st.LastMouseAt = now
 	st.MouseX = mx
 	st.MouseY = my
+	st.updateMouseVector()
 }
 
 func bounceAxis(pos, vel, minPos, maxPos, bounce float64) (float64, float64) {
@@ -142,14 +161,24 @@ func bounceAxis(pos, vel, minPos, maxPos, bounce float64) (float64, float64) {
 func (st *State) Draw() {
 	ap := st.AP
 	ap.ClearScreen()
-	if ap.W < len(text)+2 || ap.H < 3 {
-		ap.EndSyncMode()
+	if ap.W < width || ap.H < 3 {
 		return
 	}
-	startx := min(max(st.CurX-len(text)/2-1, 0), max(ap.W-len(text)-2, 0))
+	startx := min(max(st.CurX-width/2, 0), max(ap.W-width, 0))
 	starty := min(max(st.CurY-1, 0), max(ap.H-3, 0))
-	ap.DrawRoundBox(startx, starty, len(text)+2, 3)
-	ap.WriteAtStr(startx+1, starty+1, text)
+	// If the mouse is far: green, close: red, in between: yellow.
+	const maxDist = 16.0
+	var color tcolor.BasicColor
+	switch {
+	case st.MouseDist < maxDist/2:
+		color = tcolor.Red
+	case st.MouseDist < maxDist:
+		color = tcolor.Yellow
+	default:
+		color = tcolor.Green
+	}
+	ap.DrawColoredBox(startx+1, starty, width-2, 3, color.Background(), true)
+	ap.WriteAtStr(startx+2, starty+1, text)
 }
 
 func (st *State) Run() int {
@@ -194,9 +223,9 @@ func (st *State) applyMousePhysics() {
 	if !st.HasMouse {
 		return
 	}
-	awayX := st.PosX - st.MouseX
-	awayY := st.PosY - st.MouseY
-	dist := math.Hypot(awayX, awayY)
+	awayX := st.MouseAwayX
+	awayY := st.MouseAwayY
+	dist := st.MouseDist
 	if dist < 0.001 {
 		awayX, awayY, dist = 1, 0, 1
 	}
@@ -262,6 +291,7 @@ func (st *State) Tick() bool {
 	st.PosX, st.VelX = bounceAxis(st.PosX, st.VelX, minX, maxX, bounce)
 	st.PosY, st.VelY = bounceAxis(st.PosY, st.VelY, minY, maxY, bounce)
 
+	st.updateMouseVector()
 	st.syncCursor()
 	st.Draw()
 	return true
