@@ -23,6 +23,7 @@ type State struct {
 	PosX, PosY float64
 	VelX, VelY float64
 
+	HasMouse               bool
 	MouseX, MouseY         float64
 	LastMouseX, LastMouseY float64
 	LastMouseAt            time.Time
@@ -104,6 +105,40 @@ func (st *State) clampBallToArena() {
 	}
 }
 
+func (st *State) syncCursor() {
+	st.CurX = int(math.Round(st.PosX))
+	st.CurY = int(math.Round(st.PosY))
+}
+
+func (st *State) recordMouse(mx, my float64, now time.Time) {
+	if st.HasMouse {
+		dt := now.Sub(st.LastMouseAt).Seconds()
+		if dt <= 0 {
+			dt = 1.0 / 240.0
+		}
+		st.MouseSpeed = math.Hypot(mx-st.LastMouseX, my-st.LastMouseY) / dt
+	} else {
+		st.HasMouse = true
+		st.MouseSpeed = 0
+	}
+
+	st.LastMouseX = mx
+	st.LastMouseY = my
+	st.LastMouseAt = now
+	st.MouseX = mx
+	st.MouseY = my
+}
+
+func bounceAxis(pos, vel, minPos, maxPos, bounce float64) (float64, float64) {
+	if pos < minPos {
+		return minPos + (minPos - pos), -vel * bounce
+	}
+	if pos > maxPos {
+		return maxPos - (pos - maxPos), -vel * bounce
+	}
+	return pos, vel
+}
+
 func (st *State) Draw() {
 	ap := st.AP
 	ap.ClearScreen()
@@ -111,16 +146,8 @@ func (st *State) Draw() {
 		ap.EndSyncMode()
 		return
 	}
-	startx := max(st.CurX-len(text)/2-1, 0)
-	endx := startx + len(text) + 2
-	if endx > ap.W {
-		startx = max(ap.W-len(text)-2, 0)
-	}
-	starty := max(st.CurY-1, 0)
-	endy := starty + 3
-	if endy > ap.H {
-		starty = max(ap.H-3, 0)
-	}
+	startx := min(max(st.CurX-len(text)/2-1, 0), max(ap.W-len(text)-2, 0))
+	starty := min(max(st.CurY-1, 0), max(ap.H-3, 0))
 	ap.DrawRoundBox(startx, starty, len(text)+2, 3)
 	ap.WriteAtStr(startx+1, starty+1, text)
 }
@@ -130,38 +157,17 @@ func (st *State) Run() int {
 	ap.SyncBackgroundColor()
 	st.PosX = float64(ap.W) / 2
 	st.PosY = float64(ap.H/2 - 1)
-	st.CurX = int(math.Round(st.PosX))
-	st.CurY = int(math.Round(st.PosY))
+	st.syncCursor()
 	ap.OnResize = func() error {
 		st.clampBallToArena()
-		st.CurX = int(math.Round(st.PosX))
-		st.CurY = int(math.Round(st.PosY))
+		st.syncCursor()
 		ap.StartSyncMode()
 		st.Draw()
 		ap.EndSyncMode()
 		return nil
 	}
 	ap.OnMouse = func() {
-		mx := float64(ap.Mx)
-		my := float64(ap.My - 1)
-		now := time.Now()
-		if !st.LastMouseAt.IsZero() {
-			dt := now.Sub(st.LastMouseAt).Seconds()
-			if dt <= 0 {
-				dt = 1.0 / 240.0
-			}
-			mdx := mx - st.LastMouseX
-			mdy := my - st.LastMouseY
-			st.MouseSpeed = math.Hypot(mdx, mdy) / dt
-		} else {
-			st.MouseSpeed = 0
-		}
-
-		st.LastMouseX = mx
-		st.LastMouseY = my
-		st.LastMouseAt = now
-		st.MouseX = mx
-		st.MouseY = my
+		st.recordMouse(float64(ap.Mx), float64(ap.My-1), time.Now())
 	}
 	_ = ap.OnResize() // initial draw.
 	err := ap.FPSTicks(st.Tick)
@@ -185,7 +191,7 @@ func (st *State) Run() int {
 }
 
 func (st *State) applyMousePhysics() {
-	if st.LastMouseAt.IsZero() {
+	if !st.HasMouse {
 		return
 	}
 	awayX := st.PosX - st.MouseX
@@ -209,16 +215,7 @@ func (st *State) applyMousePhysics() {
 	rightGap := maxX - st.PosX
 	topGap := st.PosY - minY
 	bottomGap := maxY - st.PosY
-	nearestWallGap := leftGap
-	if rightGap < nearestWallGap {
-		nearestWallGap = rightGap
-	}
-	if topGap < nearestWallGap {
-		nearestWallGap = topGap
-	}
-	if bottomGap < nearestWallGap {
-		nearestWallGap = bottomGap
-	}
+	nearestWallGap := min(min(leftGap, rightGap), min(topGap, bottomGap))
 	const wallEscapeRadius = 4.0
 	if nearestWallGap < wallEscapeRadius && dist < fleeRadius*1.15 {
 		centerX := (minX + maxX) / 2
@@ -261,26 +258,11 @@ func (st *State) Tick() bool {
 	st.PosY += st.VelY
 
 	minX, maxX, minY, maxY := st.arenaBounds()
-	bounce := 0.82
-	if st.PosX < minX {
-		st.PosX = minX + (minX - st.PosX)
-		st.VelX = -st.VelX * bounce
-	}
-	if st.PosX > maxX {
-		st.PosX = maxX - (st.PosX - maxX)
-		st.VelX = -st.VelX * bounce
-	}
-	if st.PosY < minY {
-		st.PosY = minY + (minY - st.PosY)
-		st.VelY = -st.VelY * bounce
-	}
-	if st.PosY > maxY {
-		st.PosY = maxY - (st.PosY - maxY)
-		st.VelY = -st.VelY * bounce
-	}
+	const bounce = 0.82
+	st.PosX, st.VelX = bounceAxis(st.PosX, st.VelX, minX, maxX, bounce)
+	st.PosY, st.VelY = bounceAxis(st.PosY, st.VelY, minY, maxY, bounce)
 
-	st.CurX = int(math.Round(st.PosX))
-	st.CurY = int(math.Round(st.PosY))
+	st.syncCursor()
 	st.Draw()
 	return true
 }
