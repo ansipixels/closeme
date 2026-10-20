@@ -12,10 +12,10 @@ require (
 	fortio.org/safecast v1.2.0 // indirect
 	fortio.org/struct2env v0.4.2 // indirect
 	fortio.org/version v1.0.4 // indirect
-	github.com/jbuchbinder/gopnm v0.0.0-20220507095634-e31f54490ce0 // indirect
+	github.com/jbuchbinder/gopnm v0.0.0-20251119211316-bb594e0d2e34 // indirect
 	github.com/kortschak/goroutine v1.1.3 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	golang.org/x/crypto/x509roots/fallback v0.0.0-20251028130051-c0531f9c3451 // indirect
+	golang.org/x/crypto/x509roots/fallback v0.0.0-20261020153306-9f2b28d4331a // indirect
 	golang.org/x/image v0.47.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
